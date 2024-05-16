@@ -1,7 +1,21 @@
 name = "DiscreteCTWAPaper"
 authors = ["Adrian Braemer", "Javad Vahedi"]
-[compat]
-julia = "1.10.3"
-DrWatson = "2.15.0"
+
 [deps]
+Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 DrWatson = "634d3b9d-ee7a-5ddf-bec9-22491ea816e1"
+LoggingExtras = "e6f89c97-d47a-5376-807f-9c37f3926c36"
+OhMyThreads = "67456a42-1dca-4109-a031-0a68de7e3ad5"
+OrdinaryDiffEq = "1dea7af3-3e70-54e6-95c3-0bf5283fa5ed"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+SpinModels = "88a46c5d-b766-4f50-a717-9e2d8739cc37"
+SpinSymmetry = "ebcc8a00-959b-4e58-a088-282ffd8a4f25"
+SpinTruncatedWigner = "4f646b45-cf22-4a17-b56e-8b4ce0652eb3"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+ThreadPinning = "811555cd-349b-4f26-b7bc-1f208b848042"
+
+[compat]
+DrWatson = "2.15.0"
+SpinTruncatedWigner = "1.1.1"
+julia = "1.10.3"
