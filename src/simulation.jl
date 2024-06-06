@@ -1,6 +1,7 @@
 module Simulation
 
 using DrWatson
+using Distributed
 using Statistics
 using SparseArrays
 using LinearAlgebra
@@ -14,10 +15,10 @@ using OrdinaryDiffEq
 include("numerics.jl")
 using .Numerics
 
-function positions_for_chunkID(; chunkID, N, filling, chunksize, _...)
+function positions_for_chunkID(; prefix="", chunkID, N, filling, chunksize, _...)
     config = (; chunkID, N, filling, chunksize)
     @info "Loading positions for $(config)"
-    data, file = produce_or_load(config, datadir("positions"); tag=false) do config
+    data, file = produce_or_load(config, datadir("$(prefix)positions"); tag=false) do config
         @info "Position file not found. Generating!"
         geom = geometry_from_filling(N, filling)
         positions = generate_positions(geom, chunkID, chunksize)
@@ -28,14 +29,14 @@ function positions_for_chunkID(; chunkID, N, filling, chunksize, _...)
     return data["positions"]
 end
 
-function run(params::Dict)
+function run(params::Dict; distributed=false, threaded=false, prefix="")
     @info params
     param_tuple = dict2ntuple(params)
-    params["results"] = run(param_tuple)
-    wsave(datadir("simulations", savename(params, "jld2")), params)
+    params["results"] = run(param_tuple, distributed, threaded, prefix)
+    wsave(datadir("$(prefix)simulations", savename(params, "jld2")), params)
 end
 
-function run(params::NamedTuple)
+function run(params::NamedTuple, distributed, threaded, prefix)
     runfunction = if params.alg == "ed"
         ed_run
     elseif params.alg == "dTWA"
@@ -46,16 +47,38 @@ function run(params::NamedTuple)
         @warn "Unknown algorithm: $alg"
         return
     end
-    positions = positions_for_chunkID(; params...)
+    positions = positions_for_chunkID(; prefix, params...)
     geom = geometry_from_filling(params.N, params.filling)
     interaction = PowerLaw(params.α)
     ψ0 = NeelState(params.N, :z)
-    results = []
     rng = Xoshiro(params.chunkID)
-    for (shot, pos) in enumerate(positions)
-        @info "Shot $shot/$(length(positions))"
-        J = interaction_matrix(interaction, geom, pos)
-        push!(results, runfunction(J, ψ0; rng, params...))
+    L = length(positions)
+    if threaded
+        @info "Running parallel with $(Threads.nthreads()) threads"
+        results = tmap(positions, 1:L) do pos, id
+            J = interaction_matrix(interaction, geom, pos)
+            @info "Starting $id/$L"
+            res = runfunction(J, ψ0; rng, params...)
+            @info "Done $id/$L"
+            res
+        end
+    elseif distributed
+            @info "Running distributed with $(nworkers()) processes"
+            results = pmap(positions, 1:L) do pos, id
+                J = interaction_matrix(interaction, geom, pos)
+                @info "[W:$(myid())][$(time)] Starting $id/$L"
+                res = runfunction(J, ψ0; rng, params...)
+                @info "[W:$(myid())][$(time)] Done $id/$L"
+                res
+            end
+    else
+        results = map(positions, 1:L) do pos, id
+            J = interaction_matrix(interaction, geom, pos)
+            @info "Starting $id/$L"
+            res = runfunction(J, ψ0; rng, params...)
+            @info "Done $id/$L"
+            res
+        end
     end
     return results
 end
@@ -96,7 +119,7 @@ function ed_run(J, ψ0; tlist, N, Δ, _...)
               pair_renyi2,)
 end
 
-function ctwa_run(J, ψ0; tlist, N, Δ, rng, trajectories, clustering, clustersize, alg, _...)
+function ctwa_run(J, ψ0; tlist, N, Δ, rng, trajectories, clustering, clustersize, alg, fulldata=false,_...)
     H = hamiltonian(J, Δ)
     clusters = if clustering == "RG"
         clustering_rsrg(J)
@@ -117,8 +140,12 @@ function ctwa_run(J, ψ0; tlist, N, Δ, rng, trajectories, clustering, clustersi
     prob = TWAProblem(cb, H, cTWA_state, tlist; rng)
     t1 = time()
     sol = solve(prob, Vern8(); trajectories, abstol=1e-9, reltol=1e-9)
+    if fulldata
+        return (;   fulldata=sol.(tlist),
+                    clusters)
+    end
     t2 = time()
-    all_magnetization_data = stack(staggered_magnetization.(Ref(cb), sol.(tlist));dims=1) #[time, shot]
+    all_magnetization_data = stack(tmap(t->staggered_magnetization(cb, sol(t)), Vector{Float64}, tlist);dims=1) #[time, shot]
     t3 = time()
     #pair_renyi2 = all_pair_renyi_ctwa.(Ref(cb), sol.(tlist)) #[time]
     pair_renyi2 = tmap(t->all_pair_renyi_ctwa(cb, sol(t)), Float64, tlist) #[time]

@@ -2,20 +2,16 @@
 # ########## Begin Slurm header ##########
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --time=16:00:00
-#SBATCH --mem=180gb
-#SBATCH --cpus-per-task=48
-#SBATCH --job-name=TWA-ctwa-rg2_N16
-#SBATCH --output="logs/ctwa-rg2-N_16-%j.out"
+#SBATCH --time=00:15:00
+#SBATCH --mem=20gb
+#SBATCH --cpus-per-task=96
+#SBATCH --job-name=ED-ordered
+#SBATCH --output="logs/ED-ordered-N_16-%j.out"
 ########### End Slurm header ##########
 #=
-# load modules
-# not needed - julia installed locally
-
-# export JULIA_DEPOT_PATH=$SCRATCH
 export ON_CLUSTER=1
 export MKL_DYNAMIC=false
-exec julia1.9 --heap-size-hint=100G --color=no --threads=96 --startup-file=no scripts/run_ctwa_rg2.jl
+exec julia --heap-size-hint=300G --color=no --threads=96 --startup-file=no scripts/run_ED_ordered.jl "$@"
 =#
 using DrWatson
 @quickactivate "DiscreteCTWAPaper"
@@ -27,11 +23,8 @@ using .Setup
 
 include(srcdir("simulation.jl"))
 using .Simulation
-using OrdinaryDiffEq
 
 BLAS.set_num_threads(Threads.nthreads())
-
-CHUNKIDS = length(ARGS) > 0 ? parse.(Int, ARGS) : collect(1:10)
 
 params_section1_ordered_ed = Dict(
     "alg" => "ed",

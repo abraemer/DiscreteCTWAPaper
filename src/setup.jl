@@ -50,8 +50,9 @@ function add_datetime_logger(logger)
     end
 end
 
-function logger_for_params(params, minlevel = Logging.Info)
-    logfile = datadir("logs", savename(params, "txt"))
+function logger_for_params(params, minlevel = Logging.Info; prefix="")
+    logfile = datadir("$(prefix)logs", savename(params, "txt"))
+    mkpath(dirname(logfile))
     return MinLevelLogger(
         add_datetime_logger(
             TeeLogger(
@@ -60,7 +61,7 @@ function logger_for_params(params, minlevel = Logging.Info)
         minlevel)
 end
 
-save_file_missing(param) = !isfile(datadir("simulations", savename(param, "jld2")))
-remove_done(paramset) = filter(save_file_missing, paramset)
+save_file_missing(param; prefix="") = !isfile(datadir("$(prefix)simulations", savename(param, "jld2")))
+remove_done(paramset; prefix="") = filter(x->save_file_missing(x; prefix), paramset)
 
 end# module

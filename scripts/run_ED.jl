@@ -2,20 +2,16 @@
 # ########## Begin Slurm header ##########
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --time=16:00:00
-#SBATCH --mem=180gb
-#SBATCH --cpus-per-task=48
-#SBATCH --job-name=TWA-ctwa-rg2_N16
-#SBATCH --output="logs/ctwa-rg2-N_16-%j.out"
+#SBATCH --time=24:00:00
+#SBATCH --mem=350gb
+#SBATCH --cpus-per-task=96
+#SBATCH --job-name=ED
+#SBATCH --output="logs/ED-N_16-T-%j.out"
 ########### End Slurm header ##########
 #=
-# load modules
-# not needed - julia installed locally
-
-# export JULIA_DEPOT_PATH=$SCRATCH
 export ON_CLUSTER=1
 export MKL_DYNAMIC=false
-exec julia1.9 --heap-size-hint=100G --color=no --threads=96 --startup-file=no scripts/run_ctwa_rg2.jl
+exec julia --heap-size-hint=300G --color=no --threads=50 --gcthreads=25,1 --startup-file=no scripts/run_ED.jl "$@"
 =#
 using DrWatson
 @quickactivate "DiscreteCTWAPaper"
@@ -27,9 +23,6 @@ using .Setup
 
 include(srcdir("simulation.jl"))
 using .Simulation
-using OrdinaryDiffEq
-
-BLAS.set_num_threads(Threads.nthreads())
 
 CHUNKIDS = length(ARGS) > 0 ? parse.(Int, ARGS) : collect(1:10)
 
@@ -56,13 +49,17 @@ params_section2_ed = Dict(
 )
 
 paramset = mapreduce(remove_done∘dict_list, vcat, (params_section1_ed, params_section2_ed))
+sort!(paramset; by=x->x["chunkID"])
 total = length(paramset)
 @info "TODO" total
 for (i, params) in enumerate(paramset)
     @info "Doing $i/$total" params
+    flush(stdout)
     with_logger(logger_for_params(params)) do
         @info "Job id" get(ENV, "SLURM_JOB_ID", "") # for the param log file
-        @time Simulation.run(params)
+        @time Simulation.run(params; threaded=true)
     end
+    GC.gc(true)
+    flush(stdout)
 end
 exit(0)
